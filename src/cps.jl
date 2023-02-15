@@ -32,8 +32,13 @@
 # - Function calls with keyword arguments, or splatted arguments.
 
 macro adev(block)
-    kont_name = gensym("kont")
-    return esc(Expr(:->, kont_name, cps_transform_expr(block).expr(kont_name)))
+    transformed = cps_transform_expr(block)
+    if transformed.is_pure
+        return transformed.expr
+    else
+        kont_name = gensym("kont")
+        return esc(Expr(:->, kont_name, transformed.expr(kont_name)))
+    end
 end
 
 # The macro relies on our continuation-passing transform of functional Julia code.
