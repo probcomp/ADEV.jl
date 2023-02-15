@@ -4,7 +4,7 @@ flip = flip_mvd
 function model()
     @adev begin
         let court = @sample(flip(0.5)),
-            gunman_1 = false,
+            gunman_1 = court,
             gunman_2 = court,
             dead = gunman_1 || gunman_2
 
