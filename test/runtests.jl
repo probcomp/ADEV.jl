@@ -7,5 +7,6 @@ using ADEV
             2 + theta
         end
     end
-    @test simple(3) == 2 + 3
+    @test simulate(simple, 3) == 5
+    @test differentiate(simple, 0.5) == 1.0
 end

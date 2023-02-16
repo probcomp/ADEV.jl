@@ -33,12 +33,9 @@
 
 macro adev(block)
     transformed = cps_transform_expr(block)
-    if transformed.is_pure
-        return esc(transformed.expr)
-    else
-        kont_name = gensym("kont")
-        return esc(Expr(:->, kont_name, transformed.expr(kont_name)))
-    end
+    kont_name = gensym("kont")
+    expr = transformed.is_pure ? Expr(:call, kont_name, transformed.expr) : transformed.expr(kont_name)
+    return esc(Expr(:->, kont_name, expr))
 end
 
 # The macro relies on our continuation-passing transform of functional Julia code.
