@@ -34,7 +34,7 @@
 macro adev(block)
     transformed = cps_transform_expr(block)
     if transformed.is_pure
-        return transformed.expr
+        return esc(transformed.expr)
     else
         kont_name = gensym("kont")
         return esc(Expr(:->, kont_name, transformed.expr(kont_name)))
