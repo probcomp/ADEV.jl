@@ -30,6 +30,20 @@ function normal_reparam(mu::ForwardDiff.Dual{T}, sigma::ForwardDiff.Dual{T}) whe
     end
 end
 
+function normal_reparam(mu::ReverseDiff.TrackedReal, sigma::ReverseDiff.TrackedReal) where {T}
+    function (kont)
+        function (wants_grad, rng)
+            if !wants_grad
+                mu_val = ReverseDiff.value(mu)
+                sigma_val = ReverseDiff.value(sigma)    
+                return kont(randn(rng) * sigma_val + mu_val)(false, rng)
+            end
+
+            kont(randn(rng) * sigma + mu)(true, rng)
+        end
+    end
+end
+
 
 # NORMAL_MVD
 
@@ -56,6 +70,27 @@ function normal_mvd(mu::ForwardDiff.Dual{T}, sigma::Float64) where {T}
         end
     end
 end
+
+function normal_mvd(mu::ReverseDiff.TrackedReal, sigma::Float64) where {T}
+    function (kont)
+        function (wants_grad, rng)
+            if !wants_grad
+                return kont(randn(rng) * sigma + mu)(false, rng)
+            end
+            mu_val = ReverseDiff.value(mu)
+            sigma_val = sigma
+            val = randn(rng) * sigma_val + mu_val
+            wei = rand(rng, Weibull(2, sqrt(2)))
+            rng1, rng2 = copy(rng), copy(rng)
+            primal_result = kont(val)(true, rng)
+            plus_result   = kont(mu_val + wei * sigma_val)(false, rng1)
+            minus_result  = kont(mu_val - wei * sigma_val)(false, rng2)
+
+            return phantom_gradient(mu, (plus_result - minus_result) / (sigma * sqrt(2*pi))) + primal_result
+        end
+    end
+end
+
 
 function normal_mvd_is(mu::ForwardDiff.Dual{T}, sigma::Float64) where {T}
     function (kont)
@@ -100,6 +135,25 @@ function normal_reinforce(mu::Union{Float64,ForwardDiff.Dual{T}}, sigma::Union{F
                 result = kont(ForwardDiff.Dual{T}(x,0))(true, rng)
                 lpdf = logpdf(Normal(mu, sigma), x)
                 return ForwardDiff.Dual{T}(ForwardDiff.value(result), ForwardDiff.partials(result) + ForwardDiff.partials(lpdf) * ForwardDiff.value(result))
+            end
+        end
+    end
+end
+
+
+function normal_reinforce(mu::Union{Float64,ReverseDiff.TrackedReal}, sigma::Union{Float64,ReverseDiff.TrackedReal})
+    function (kont)
+        function (wants_grad, rng)
+            mu_val = ReverseDiff.value(mu)
+            sigma_val = ReverseDiff.value(sigma)
+            if !wants_grad
+                return kont(randn(rng) * sigma_val + mu_val)(false, rng)
+            else
+                x = randn(rng) * sigma_val + mu_val
+                # TODO: do we need to ensure that the x we pass is 'tracked'?
+                result = kont(x)(true, rng)
+                lpdf = logpdf(Normal(mu, sigma), x)
+                return phantom_gradient(lpdf, result) + result
             end
         end
     end

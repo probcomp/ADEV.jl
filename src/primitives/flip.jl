@@ -41,25 +41,34 @@ function flip_mvd(p::ForwardDiff.Dual{T}) where {T}
     end
 end
 
-# ENUMERATION-BASED DERIVATIVE for FLIP
 
-function adev_map(f, l)
-    @adev begin
-        if isempty(l)
-            []
-        else
-            let x = @sample(f(l[1])),
-                rest = l[2:end],
-                xs = @sample(adev_map(f, rest))
+phantom_gradient(var, grad) = 0
+phantom_gradient(var::ReverseDiff.TrackedReal, grad) = ReverseDiff.track(phantom_gradient, var, grad)
+ReverseDiff.@grad function phantom_gradient(var, grad)
+    return 0.0, Δ -> (ReverseDiff.value(grad) * Δ, 0.0)
+end
 
-                [xs, xs...]
+function flip_mvd(p::ReverseDiff.TrackedReal)
+    function run(kont)
+        function (wants_grad, rng)
+            if !wants_grad
+                return kont(rand(rng) < p)(false, rng)
+            else
+                b = rand(rng) < p
+                # Copy the rng object
+                rng_copy = copy(rng)
+                l1 = kont(b)(true, rng)
+                l2 = kont(!b)(false, rng_copy)
+
+                return phantom_gradient(p, (l1-l2) * (b ? 1 : -1)) + l1
             end
         end
     end
 end
 
+# ENUMERATION-BASED DERIVATIVE for FLIP
 
-function flip_enum(p::ForwardDiff.Dual{T}) where {T}
+function flip_enum(p::Union{ReverseDiff.TrackedReal,ForwardDiff.Dual{T}}) where {T}
     function (kont)
         function (wants_grad, rng)
             if !wants_grad
@@ -87,6 +96,21 @@ function flip_reinforce(p::ForwardDiff.Dual{T}) where {T}
                 result = kont(b)(true, rng)
                 lpdf = b ? log(p) : log(1 - p)
                 return ForwardDiff.Dual{T}(ForwardDiff.value(result), ForwardDiff.partials(result) + ForwardDiff.partials(lpdf) * ForwardDiff.value(result))
+            end
+        end
+    end
+end
+
+function flip_reinforce(p::ReverseDiff.TrackedReal)
+    function (kont)
+        function (wants_grad, rng)
+            if !wants_grad
+                return kont(rand(rng) < p)(false, rng)
+            else
+                b = rand(rng) < p
+                result = kont(b)(true, rng)
+                lpdf = b ? log(p) : log(1 - p)
+                return phantom_gradient(lpdf, result) + result # magic_second(lpdf, result)
             end
         end
     end
