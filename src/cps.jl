@@ -54,6 +54,10 @@ function cps_transform_expr(e :: Number)
     return (is_pure = true, expr = e)
 end
 
+function cps_transform_expr(e :: String)
+    return (is_pure = true, expr = e)
+end
+
 function cps_transform_call(head, parameters, args)
     return (is_pure = false, expr = (kont) -> begin
             # TODO: handle splatted arguments.
@@ -114,6 +118,18 @@ function cps_transform_expr(e :: Expr)
                 return (is_pure = false, expr = kont_name -> transformed.expr(Expr(:->, effectful_val_name, Expr(:call, effectful_val_name, kont_name))))
             end
         end
+
+        if e.args[1] == Symbol("@trace")
+
+            effectful_val = Expr(:call, :gentrace, e.args[3:end]...)
+            transformed = cps_transform_expr(effectful_val)
+            if transformed.is_pure
+                return (is_pure = false, expr = kont -> Expr(:call, effectful_val, kont))
+            else
+                effectful_val_name = gensym("effectful_val")
+                return (is_pure = false, expr = kont_name -> transformed.expr(Expr(:->, effectful_val_name, Expr(:call, effectful_val_name, kont_name))))
+            end
+        end
     end
 
     # Assignment
@@ -141,16 +157,20 @@ function cps_transform_expr(e :: Expr)
 
         # Just one assignment
         lhs = assmt.args[1]
-        @assert lhs isa Symbol "`let` can only assign to variables, not $(lhs)"
+        @assert (lhs isa Symbol || (lhs isa Expr && lhs.head == :tuple)) "`let` can only assign to variables and tuples, not $(lhs)"
+        if lhs isa Expr
+            lhs = Expr(:tuple, lhs)
+        end
+        
         rhs = cps_transform_expr(assmt.args[2])
         if rhs.is_pure && body.is_pure
             return (is_pure = true, expr = e)
         elseif rhs.is_pure && !body.is_pure
             return (is_pure = false, expr = kont -> Expr(:let, assmt, body.expr(kont)))
         elseif !rhs.is_pure && body.is_pure
-            return (is_pure = false, expr = kont -> rhs.expr(Expr(:->, lhs, Expr(:call, kont, body.expr))))
+            return (is_pure = false, expr = kont -> rhs.expr(Expr(:->, lhs, Expr(:block, Expr(:call, kont, body.expr)))))
         elseif !rhs.is_pure && !body.is_pure
-            return (is_pure = false, expr = kont -> rhs.expr(Expr(:->, lhs, body.expr(kont))))
+            return (is_pure = false, expr = kont -> rhs.expr(Expr(:->, lhs, Expr(:block, body.expr(kont)))))
         end
     end
     

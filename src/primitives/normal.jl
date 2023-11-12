@@ -30,7 +30,7 @@ function normal_reparam(mu::ForwardDiff.Dual{T}, sigma::ForwardDiff.Dual{T}) whe
     end
 end
 
-function normal_reparam(mu::ReverseDiff.TrackedReal, sigma::ReverseDiff.TrackedReal) where {T}
+function normal_reparam(mu::ReverseDiff.TrackedReal, sigma::ReverseDiff.TrackedReal)
     function (kont)
         function (wants_grad, rng)
             if !wants_grad
@@ -71,7 +71,7 @@ function normal_mvd(mu::ForwardDiff.Dual{T}, sigma::Float64) where {T}
     end
 end
 
-function normal_mvd(mu::ReverseDiff.TrackedReal, sigma::Float64) where {T}
+function normal_mvd(mu::ReverseDiff.TrackedReal, sigma::Float64)
     function (kont)
         function (wants_grad, rng)
             if !wants_grad
